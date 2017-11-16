@@ -107,4 +107,62 @@ describe('jayson.tcp', function() {
 
   });
 
+  describe('client - reuseConnection', function() {
+    
+    var server = jayson.server(support.server.methods, support.server.options);
+    var server_tcp = server.tcp();
+    var client = jayson.client.tcp({
+      reviver: support.server.options.reviver,
+      replacer: support.server.options.replacer,
+      host: 'localhost',
+      port: 3999,
+      reuseConnection: true
+    });
+
+    before(function(done) {
+      server_tcp.listen(3999, 'localhost', done);
+    });
+
+    after(function() {
+      client.end();
+      server_tcp.close();
+    });
+
+    describe('common tests', suites.getCommonForClient(client));
+
+    describe('extra tests', function() {
+      it('add_slow', function(done) {
+        var idx;
+        var NUM_ITERATIONS = 20000;
+        var count = 0;
+        var item;
+
+        function onResponse(data, err, error, result) {
+          count++;
+          should.exist(result);
+          result.should.equal(data[0] + data[1]);
+          if ( count === NUM_ITERATIONS ) {
+            done();
+          }
+        }
+
+        function getRandomIntInclusive(min, max) {
+          min = Math.ceil(min);
+          max = Math.floor(max);
+          //The maximum is inclusive and the minimum is inclusive 
+          return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        this.timeout(5 * 1000);
+        for ( idx = 0; idx < NUM_ITERATIONS; ++idx ) {
+          item = [ getRandomIntInclusive(0, 1000),
+                    getRandomIntInclusive(0, 1000),
+                    idx % 4 === 0 ? true : false ];
+          client.request('add_slow', item, onResponse.bind(this, item));
+        }
+      });
+    });
+
+  });
+
 });
