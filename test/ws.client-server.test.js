@@ -247,7 +247,6 @@ describe('client', function() {
   });
 
   describe('client/server share connection', function() {
-
     var serverMethods = {
       multiply: function(a, b, callback) {
         this.client.request('multiply', [a, b], function(err, resp) {
@@ -315,6 +314,7 @@ describe('client', function() {
 
       notify: function(message, callback) {
         notifyMsg = message;
+        callback();
       }
     };
 
@@ -334,7 +334,10 @@ describe('client', function() {
       server_ws = serverApi.ws({host:'localhost', port:3999});
       server_ws.once('listening', function() {
         done();
-      })
+      });
+      server_ws.once('connection', function(wsock) {
+        serverApi.client = jayson.client.ws({ wsock : wsock });
+      });
     });
 
     after(function(done) {
@@ -347,7 +350,7 @@ describe('client', function() {
     describe('test client API', function() {
       it('multiply_slow', function(done) {
         var idx;
-        var NUM_ITERATIONS = 10000;
+        var NUM_ITERATIONS = 5000;
         var count = 0;
         var item;
 
@@ -371,7 +374,7 @@ describe('client', function() {
 
       it('multiply', function(done) {
         var idx;
-        var NUM_ITERATIONS = 10000;
+        var NUM_ITERATIONS = 5000;
         var count = 0;
         var item;
 
@@ -402,6 +405,15 @@ describe('client', function() {
             error: {code: -1000, message: 'An error message' }
           });
           done();
+        });
+      });
+
+      it('notify', function(done) {
+        client_ws.request('notify', ['Hello'], null, function(err, resp) {
+          setTimeout(function() {
+            notifyMsg.should.equal('Hello');
+            done();
+          }, 50);
         });
       });
 

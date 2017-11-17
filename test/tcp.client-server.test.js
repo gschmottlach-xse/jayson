@@ -146,23 +146,193 @@ describe('jayson.tcp', function() {
           }
         }
 
-        function getRandomIntInclusive(min, max) {
-          min = Math.ceil(min);
-          max = Math.floor(max);
-          //The maximum is inclusive and the minimum is inclusive 
-          return Math.floor(Math.random() * (max - min + 1)) + min;
-        }
-
         this.timeout(5 * 1000);
         for ( idx = 0; idx < NUM_ITERATIONS; ++idx ) {
-          item = [ getRandomIntInclusive(0, 1000),
-                    getRandomIntInclusive(0, 1000),
-                    idx % 4 === 0 ? true : false ];
+          item = [ _.random(1000),
+                  _.random(1000),
+                  idx % 4 === 0 ? true : false ];
           client.request('add_slow', item, onResponse.bind(this, item));
         }
       });
     });
 
+  });
+
+  describe('client/server share connection', function() {
+    var serverMethods = {
+      multiply: function(a, b, callback) {
+        this.client.request('multiply', [a, b], function(err, resp) {
+          if (err) {
+            callback(err);
+          }
+          else {
+            callback(null, resp.result);
+          }
+        });
+      },
+
+      multiply_slow: function(a, b, isSlow, callback) {
+        this.client.request('multiply_slow', [a, b, isSlow], function(err, resp) {
+          if (err) {
+            callback(err);
+          }
+          else {
+            callback(null, resp.result);
+          }
+        });
+      },
+
+      error: function(arg, callback) {
+        this.client.request('error', [arg], function(err, resp) {
+          if (err) {
+            callback(err);
+          }
+          else {
+            callback(resp.error);
+          }
+        });
+      },
+
+      notify: function(message, callback) {
+        this.client.request('notify', [ message ], null, function(err) {
+          if (err) {
+            throw(err);
+          }
+        });
+      }
+    };
+
+    var clientMethods = {
+      multiply: function(a, b, callback) {
+        var result = a * b;
+        callback(null, result);
+      },
+
+      multiply_slow: function(a, b, isSlow, callback) {
+        var result = a * b;
+        if ( isSlow ) {
+          setTimeout(function() {
+            callback(null, result);
+          }, 20);
+        }
+        else {
+          callback(null, result);
+        }
+      },
+
+      error: function(arg, callback) {
+        callback(this.error(-1000, 'An error message'));
+      },
+
+      notify: function(message, callback) {
+        notifyMsg = message;
+        callback();
+      }
+    };
+
+    var serverOpts = { collect: false };
+    var serverApi = jayson.server(serverMethods, serverOpts);
+    var server_tcp;
+    var notifyMsg;
+    var clientOpts = { collect: false };
+    var clientApi = jayson.server(clientMethods, clientOpts);
+    var client_tcp = jayson.client.tcp({
+      host:'localhost', 
+      port:3999,
+      reuseConnection: true,
+      server: clientApi
+    });
+
+
+    before(function(done) {
+      server_tcp = serverApi.tcp();
+      server_tcp.listen({host:'localhost', port:3999});
+      server_tcp.once('listening', function() {
+        done();
+      });
+      server_tcp.once('connection', function(sock) {
+        serverApi.client = jayson.client.tcp({ socket : sock });
+      });
+    });
+
+    after(function(done) {
+      client_tcp.end();
+      server_tcp.close(function() {
+        notifyMsg = null;
+        done();
+      });
+    });
+
+    describe('test client API', function() {
+      it('multiply_slow', function(done) {
+        var idx;
+        var NUM_ITERATIONS = 1;
+        var count = 0;
+        var item;
+
+        function onResponse(data, err, error, result) {
+          count++;
+          should.exist(result);
+          result.should.equal(data[0] * data[1]);
+          if ( count === NUM_ITERATIONS ) {
+            done();
+          }
+        }
+
+        this.timeout(5 * 1000);
+        for ( idx = 0; idx < NUM_ITERATIONS; ++idx ) {
+          item = [ _.random(1000),
+                    _.random(1000),
+                    idx % 4 === 0 ? true : false ];
+          client_tcp.request('multiply_slow', item, onResponse.bind(this, item));
+        }
+      });
+
+      it('multiply', function(done) {
+        var idx;
+        var NUM_ITERATIONS = 1;
+        var count = 0;
+        var item;
+
+        function onResponse(data, err, error, result) {
+          count++;
+          should.exist(result);
+          result.should.equal(data[0] * data[1]);
+          if ( count === NUM_ITERATIONS ) {
+            done();
+          }
+        }
+
+        this.timeout(5 * 1000);
+        for ( idx = 0; idx < NUM_ITERATIONS; ++idx ) {
+          item = [ _.random(1000),
+                  _.random(1000) ];
+          client_tcp.request('multiply', item, onResponse.bind(this, item));
+        }
+      });
+
+      it('error', function(done) {
+        var idx;
+        var count = 0;
+        var item;
+
+        client_tcp.request('error', [5], function(err, resp) {
+          resp.should.containDeep({
+            error: {code: -1000, message: 'An error message' }
+          });
+          done();
+        });
+      });
+
+      it('notify', function(done) {
+        client_tcp.request('notify', ['Hello'], null, function(err, resp) {
+          setTimeout(function() {
+            notifyMsg.should.equal('Hello');
+            done();
+          }, 50);
+        });
+      });
+    });
   });
 
 });
