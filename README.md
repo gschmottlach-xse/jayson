@@ -48,7 +48,7 @@ Jayson is a [JSON-RPC 2.0][jsonrpc-spec] and [1.0][jsonrpc1-spec] compliant serv
 ## Features
 
 * Servers that can listen to several interfaces at the same time
-* Supports both HTTP and TCP client and server connections
+* Supports both HTTP, TCP and WebSocket client and server connections
 * Server-side method routing
 * Relaying of requests to other servers
 * JSON reviving and replacing for transparent serialization of complex objects
@@ -148,13 +148,14 @@ The client is available as the `Client` or `client` property of `require('jayson
 
 #### Client interface description
 
-| Name            | Description     |
-| --------------- | --------------- |
-| `Client`        | Base class      |
-| `Client.tcp`    | TCP interface   |
-| `Client.tls`    | TLS interface   |
-| `Client.http`   | HTTP interface  |
-| `Client.https`  | HTTPS interface |
+| Name            | Description         |
+| --------------- | --------------------|
+| `Client`        | Base class          |
+| `Client.tcp`    | TCP interface       |
+| `Client.tls`    | TLS interface       |
+| `Client.http`   | HTTP interface      |
+| `Client.https`  | HTTPS interface     |
+| `Client.ws`     | WebSocket interface |
 
 Every client supports these options:
 
@@ -208,9 +209,29 @@ Will emit the [same custom events](#clienthttp-events) as `Client.http`.
 
 ##### Client.tcp
 
-Uses the same options as [net.connect][nodejs_docs_net_connect] in addition _to the same options as `Client.http`_.
+Uses the same options as [net.connect][nodejs_docs_net_connect] and the options defined for `Client.http`. There are additional options too including
+
+| Option     	| Default 	| Type     	| Description                    	|
+|------------	|---------	|----------	|--------------------------------	|
+| `reuseConnection` 	| `false`  	| `Boolean` 	| Whether or not to re-use a socket connection for multiple requests (*true*) or not (*false*). 	|
+| `socket`    | `null` | `net.Socket` | An option to re-use an existing (open) socket if provided. If provided, `reuseConnection` is implicitly set to *true*. |
+| `ownsSock` | `false` | `Boolean` | Indicates whether or not the client owns/manages the lifetime of the underlying socket used to transport requests. If `reuseConnection` is `false` then the socket is implicitly owned by the client and will be managed as such. This option is primarily intended to mark whether or not sockets passed into the client are managed by the client. |
+| `server` | `null` | `jayson.Server` | The (optional) client-side JSON-RPC server handling bi-directional peer-to-peer requests from the "remote" server.|
 
 [nodejs_docs_net_connect]: https://nodejs.org/api/net.html#net_net_connect
+
+##### Client.ws
+
+Uses the same options as [WebSocket][nodejs_docs_websocket]. There are additional options too including
+
+| Option     	| Default 	| Type     	| Description                    	|
+|------------	|---------	|----------	|--------------------------------	|
+| `wsock`    | `null` | `ws.WebSocket` | An option to re-use an existing (open) websocket if provided. |
+| `ownsSock` | `false` | `Boolean` | Indicates whether or not the client owns/manages the lifetime of the underlying websocket used to transport requests. This option is primarily intended to mark whether or not sockets passed into the client are managed by the client. |
+| `server` | `null` | `jayson.Server` | The (optional) client-side JSON-RPC server handling bi-directional peer-to-peer requests from the "remote" server.|
+
+[nodejs_docs_websocket]: https://github.com/websockets/ws/blob/master/doc/ws.md#class-websocket
+
 
 ##### Client.tls
 
@@ -333,12 +354,14 @@ The server also sports several interfaces that can be accessed as properties of 
 | `Server.tls`        	| TLS server that inherits from [tls.Server][nodejs_doc_tls_server]                          	|
 | `Server.http`       	| HTTP server that inherits from [http.Server][nodejs_doc_http_server]                       	|
 | `Server.https`      	| HTTPS server that inherits from [https.Server][nodejs_doc_https_server]                    	|
+| `Server.ws`      	| WebSocket server that inherits from [ws.WebSocket.Server][nodejs_doc_https_server]
 | `Server.middleware` 	| Method that returns a [Connect][connect]/[Express][express] compatible middleware function 	|
 
 [nodejs_doc_net_server]: http://nodejs.org/docs/latest/api/net.html#net_class_net_server
 [nodejs_doc_http_server]: http://nodejs.org/docs/latest/api/http.html#http_class_http_server
 [nodejs_doc_https_server]: http://nodejs.org/docs/latest/api/https.html#https_class_https_server
 [nodejs_doc_tls_server]: https://nodejs.org/api/tls.html#tls_class_tls_server
+[nodejs_doc_ws_server]: https://github.com/websockets/ws/blob/master/doc/ws.md#class-websocketserver
 [connect]: http://www.senchalabs.org/connect/
 [express]: http://expressjs.com/
 
@@ -378,6 +401,10 @@ Uses the same options as the base class. Inherits from [http.Server][nodejs_doc_
 Uses the same options as the base class. Inherits from [https.Server][nodejs_doc_https_server] and `jayson.Server.http`. For information on how to configure certificates, [see the documentation on https.Server][nodejs_doc_https_server].
 
 Will emit the [same custom events](#serverhttp-events) as `Server.http`.
+
+##### Server.ws
+
+Uses the same options as the base class. Inherits from [ws.WebSocket.Server][nodejs_doc_ws_server].
 
 ##### Server.middleware
 
@@ -892,7 +919,7 @@ server.http().listen(3000);
 
 * If requesting methods on a Jayson server, arguments left out will be `undefined`
 * Too many arguments or arguments with invalid names will be ignored
-* It is assumed that the last argument to a server method is the callback and it will not be filled with something else
+* It is assumed that the last argument to a server method is the callback and it will not be filled with something else. The callback function itself will also have a `transport` attribute which is an object containing a `protocol` field indicating the transport type (e.g. `http:`, `https:`, `tcp:`, `tls:` or `ws:`) and another field (`socket`) with the socket instance used to transport the request.
 * Parsing a function signature and filling in arguments is generally *not recommended* and should be avoided
 
 ### Promises
