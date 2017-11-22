@@ -41,4 +41,10 @@ PromiseClient.tls = require('./tls');
  */
 PromiseClient.tcp = require('./tcp');
 
+/**
+ * @type PromiseClientWs
+ * @static
+ */
+PromiseClient.ws = require('./ws');
+
 module.exports = PromiseClient;
